@@ -17,7 +17,7 @@ NUM_PREFILL_SEQS = [1, 3, 7]  # Arbitrary values for testing
 NUM_HEADS = [(40, 40), (64, 8)]  # Arbitrary values for testing
 HEAD_SIZES = [64, 80, 96, 112, 128, 256]
 BLOCK_SIZES = [8, 16, 32]
-USE_ALIBI = [False]  # TODO(woosuk): Add USE_ALIBI=True
+USE_ALIBI = [False, True]
 SEEDS = [0]
 
 
@@ -83,7 +83,7 @@ def ref_single_query_cached_kv_attention(
         if alibi_slopes is not None:
             # Create the ALiBi bias used in the paged attention kernel.
             position_ids = torch.arange(context_len, device="cuda").int()
-            alibi_bias = (context_len - position_ids).float()
+            alibi_bias = -(context_len - position_ids - 1).float()
             alibi_bias = alibi_slopes.view(-1, 1, 1) * alibi_bias.view(
                 1, 1, -1)
 
@@ -132,7 +132,7 @@ def test_single_query_cached_kv_attention(
     if use_alibi:
         alibi_slopes = torch.randn(num_query_heads,
                                    dtype=torch.float,
-                                   device="cuda")
+                                   device="cuda") * 10
 
     context_lens = [random.randint(1, MAX_SEQ_LEN) for _ in range(num_seqs)]
     max_context_len = max(context_lens)
@@ -184,7 +184,6 @@ def test_single_query_cached_kv_attention(
         scale,
         alibi_slopes,
     )
-
     # NOTE(woosuk): Due to the kernel-level differences in the two
     # implementations, there is a small numerical difference in the two
     # outputs. Thus, we use a relaxed tolerance for the test.
