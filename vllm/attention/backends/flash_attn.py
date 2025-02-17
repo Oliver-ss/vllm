@@ -787,7 +787,6 @@ class FlashAttentionImpl(AttentionImpl):
                         None,
                         0,
                         1,
-                        alibi_slopes,
                     )
                 else:
                     flash_attn_varlen_func(
@@ -914,24 +913,24 @@ class FlashAttentionImpl(AttentionImpl):
                     ) = get_seq_len_block_table_args(decode_meta, False,
                                                      attn_type)
                     torch.ops.Optimus.vllm_fwd_kvcache(
-                        q=decode_query.unsqueeze(1),
-                        k_cache=key_cache,
-                        v_cache=value_cache,
-                        k=None,
-                        v=None,
-                        cache_seqlens=seq_lens_arg,
-                        rotary_cos=None,
-                        rotary_sin=None,
-                        cache_batch_idx=None,
-                        block_table=block_tables_arg,
-                        alibi_slopes=alibi_slopes,
-                        out=decode_output.unsqueeze(1),
-                        softmax_scale=softmax_scale,
-                        causal=True,
-                        window_size_left=window_size[0],
-                        window_size_right=window_size[1],
-                        rotary_interleaved=True,
-                        num_splits=0
+                        decode_query.unsqueeze(1),
+                        key_cache,
+                        value_cache,
+                        None,
+                        None,
+                        seq_lens_arg,
+                        None,
+                        None,
+                        None,
+                        block_tables_arg,
+                        alibi_slopes,
+                        decode_output.unsqueeze(1),
+                        softmax_scale,
+                        True,
+                        window_size[0],
+                        window_size[1],
+                        True,
+                        0
                     )
                 else:
                     (

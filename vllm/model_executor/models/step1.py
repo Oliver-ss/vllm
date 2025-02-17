@@ -212,7 +212,7 @@ class Step1DecoderLayer(nn.Module):
             hidden_states: torch.Tensor,
             kv_cache: torch.Tensor,
             attn_metadata: AttentionMetadata,
-            sampling_metadata: Optional[SamplingMetadata] = None
+            residual: Optional[torch.Tensor],
     ) -> torch.Tensor:
         # Self Attention
         if residual is None:
