@@ -902,12 +902,15 @@ class FlashInferImpl(AttentionImpl):
         scale: float,
         num_kv_heads: int,
         alibi_slopes: Optional[List[float]],
+        alibi_sqrt: bool,
         sliding_window: Optional[int],
         kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
         attn_type: str = AttentionType.DECODER,
     ) -> None:
+        assert alibi_sqrt is False, ValueError(
+            "alibi_sqrt is invalid for FlashInfer attention.")
         self.num_heads = num_heads
         self.head_size = head_size
         self.scale = float(scale)

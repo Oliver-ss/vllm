@@ -37,6 +37,7 @@ class Attention(nn.Module):
         scale: float,
         num_kv_heads: Optional[int] = None,
         alibi_slopes: Optional[List[float]] = None,
+        alibi_sqrt: bool = False,
         cache_config: Optional[CacheConfig] = None,
         quant_config: Optional[QuantizationConfig] = None,
         blocksparse_params: Optional[Dict[str, Any]] = None,
@@ -113,7 +114,7 @@ class Attention(nn.Module):
                                         use_mla=use_mla)
         impl_cls = attn_backend.get_impl_cls()
         self.impl = impl_cls(num_heads, head_size, scale, num_kv_heads,
-                             alibi_slopes, sliding_window, kv_cache_dtype,
+                             alibi_slopes, alibi_sqrt, sliding_window, kv_cache_dtype,
                              blocksparse_params, logits_soft_cap, attn_type,
                              **extra_impl_args)
         self.num_heads = num_heads

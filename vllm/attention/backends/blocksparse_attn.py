@@ -300,6 +300,7 @@ class BlocksparseFlashAttentionImpl(AttentionImpl):
         scale: float,
         num_kv_heads: int,
         alibi_slopes: Optional[List[float]],
+        alibi_sqrt: bool,
         sliding_window: Optional[int],
         kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
@@ -313,6 +314,8 @@ class BlocksparseFlashAttentionImpl(AttentionImpl):
             "sliding_window is invalid for blocksparse attention.")
         assert logits_soft_cap is None, ValueError(
             "logits_soft_cap is invalid for blocksparse attention.")
+        assert alibi_sqrt is False, ValueError(
+            "alibi_sqrt is invalid for blocksparse attention.")
 
         if "num_heads" not in blocksparse_params:
             blocksparse_params["num_heads"] = num_heads

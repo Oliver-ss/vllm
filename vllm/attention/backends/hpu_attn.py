@@ -102,6 +102,7 @@ class HPUAttentionImpl(AttentionImpl, torch.nn.Module):
         scale: float,
         num_kv_heads: int,
         alibi_slopes: Optional[List[float]],
+        alibi_sqrt: bool,
         sliding_window: Optional[int],
         kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
@@ -109,6 +110,8 @@ class HPUAttentionImpl(AttentionImpl, torch.nn.Module):
         attn_type: str = AttentionType.DECODER,
     ) -> None:
         super(AttentionImpl, self).__init__()
+        assert alibi_sqrt is False, ValueError(
+            "alibi_sqrt is invalid for HPU attention.")
         self.kv_cache_dtype = kv_cache_dtype
         self.num_heads = num_heads
         self.head_size = head_size

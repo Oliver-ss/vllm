@@ -11,12 +11,33 @@ from pathlib import Path
 from shutil import which
 from typing import Dict, List
 
+import requests
 import torch
 from packaging.version import Version, parse
 from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 from setuptools_scm import get_version
 from torch.utils.cpp_extension import CUDA_HOME, ROCM_HOME
+
+
+def fetch_vllm_library(url, save_path):
+    timeout_s = 30
+    try:
+        save_dir = os.path.dirname(save_path)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir, exist_ok=True)
+
+        response = requests.get(url, timeout=timeout_s)
+        response.raise_for_status()  # 如果响应状态码不是200，会抛出异常
+
+        # 将下载的内容保存到文件
+        with open(save_path, 'wb') as file:
+            file.write(response.content)
+        print(f"save to {save_path}")
+    except requests.Timeout:
+        print(f"请求超时,url is {url}")
+    except requests.RequestException as e:
+        print(f"请求失败: {e}")
 
 
 def load_module_from_path(module_name, path):
@@ -207,7 +228,6 @@ class cmake_build_ext(build_ext):
         for ext in self.extensions:
             self.configure(ext)
             targets.append(target_name(ext.name))
-
         num_jobs, _ = self.compute_num_jobs()
 
         build_args = [
@@ -217,7 +237,30 @@ class cmake_build_ext(build_ext):
             *[f"--target={name}" for name in targets],
         ]
 
-        subprocess.check_call(["cmake", *build_args], cwd=self.build_temp)
+        if os.getenv('VLLM_BUILD_FROM_SOURCE') is not None:
+            subprocess.check_call(["cmake", *build_args], cwd=self.build_temp)
+        else:
+            print(
+                "if you want build from source,please set env VLLM_BUILD_FROM_SOURCE=1"
+            )
+            # 对应oss存储路径为 s3://brain-deploy/data/stepcast/vllm/
+            fetch_vllm_library(
+                "http://deploy.i.basemind.com/data/stepcast/vllm/0.7.2/_C.abi3.so",
+                "build/lib.linux-x86_64-cpython-310/vllm/_C.abi3.so")
+            fetch_vllm_library(
+                "http://deploy.i.basemind.com/data/stepcast/vllm/0.7.2/_moe_C.abi3.so",
+                "build/lib.linux-x86_64-cpython-310/vllm/_moe_C.abi3.so")
+            fetch_vllm_library(
+                "http://deploy.i.basemind.com/data/stepcast/vllm/0.7.2/cumem_allocator.abi3.so",
+                "build/lib.linux-x86_64-cpython-310/vllm/cumem_allocator.abi3.so")
+            fetch_vllm_library(
+                "http://deploy.i.basemind.com/data/stepcast/vllm/0.7.2/_vllm_fa3_C.abi3.so",
+                "build/lib.linux-x86_64-cpython-310/vllm/_vllm_fa3_C.abi3.so"
+            )
+            fetch_vllm_library(
+                "http://deploy.i.basemind.com/data/stepcast/vllm/0.7.2/_vllm_fa2_C.abi3.so",
+                "build/lib.linux-x86_64-cpython-310/vllm/_vllm_fa2_C.abi3.so"
+            )
 
         # Install the libraries
         for ext in self.extensions:
@@ -236,7 +279,6 @@ class cmake_build_ext(build_ext):
             prefix = outdir
             if '.' in ext.name:
                 prefix = prefix.parent
-
             # prefix here should actually be the same for all components
             install_args = [
                 "cmake", "--install", ".", "--prefix", prefix, "--component",
@@ -629,7 +671,7 @@ else:
     }
 
 setup(
-    name="vllm",
+    name="step-vllm",
     version=get_vllm_version(),
     author="vLLM Team",
     license="Apache 2.0",

@@ -113,12 +113,15 @@ class IpexAttnBackendImpl(AttentionImpl[IpexAttnMetadata]):
         scale: float,
         num_kv_heads: int,
         alibi_slopes: Optional[List[float]],
+        alibi_sqrt: bool,
         sliding_window: Optional[int],
         kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
         attn_type: str = AttentionType.DECODER,
     ) -> None:
+        assert alibi_sqrt is False, ValueError(
+            "alibi_sqrt is invalid for IPEX attention.")
         if blocksparse_params is not None:
             raise ValueError(
                 "IPEX backend does not support block-sparse attention.")

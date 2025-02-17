@@ -610,6 +610,7 @@ class FlashAttentionImpl(AttentionImpl):
         scale: float,
         num_kv_heads: int,
         alibi_slopes: Optional[List[float]],
+        alibi_sqrt: bool,
         sliding_window: Optional[int],
         kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
@@ -626,6 +627,7 @@ class FlashAttentionImpl(AttentionImpl):
         if alibi_slopes is not None:
             alibi_slopes = torch.tensor(alibi_slopes, dtype=torch.float32)
         self.alibi_slopes = alibi_slopes
+        self.alibi_sqrt = alibi_sqrt
         self.sliding_window = ((sliding_window - 1,
                                 0) if sliding_window is not None else (-1, -1))
         self.kv_cache_dtype = kv_cache_dtype
@@ -767,21 +769,42 @@ class FlashAttentionImpl(AttentionImpl):
                 key = key[:num_prefill_kv_tokens]
                 value = value[:num_prefill_kv_tokens]
 
-                flash_attn_varlen_func(
-                    q=query,
-                    k=key,
-                    v=value,
-                    cu_seqlens_q=q_seq_start_loc,
-                    cu_seqlens_k=k_seq_start_loc,
-                    max_seqlen_q=q_seq_len,
-                    max_seqlen_k=k_seq_len,
-                    softmax_scale=softmax_scale,
-                    causal=_get_causal_option(attn_type),
-                    window_size=window_size,
-                    alibi_slopes=alibi_slopes,
-                    softcap=logits_soft_cap,
-                    out=prefill_output,
-                    fa_version=self.fa_version,
+                if self.alibi_sqrt:
+                    torch.ops.Optimus.varlen_fwd(
+                        query,
+                        key,
+                        value,
+                        prefill_output,
+                        q_seq_start_loc,
+                        k_seq_start_loc,
+                        q_seq_len,
+                        k_seq_len,
+                        0.0,
+                        query.shape[-1]**(-0.5),
+                        False,
+                        True,
+                        False,
+                        None,
+                        0,
+                        1,
+                        alibi_slopes,
+                    )
+                else:
+                    flash_attn_varlen_func(
+                        q=query,
+                        k=key,
+                        v=value,
+                        cu_seqlens_q=q_seq_start_loc,
+                        cu_seqlens_k=k_seq_start_loc,
+                        max_seqlen_q=q_seq_len,
+                        max_seqlen_k=k_seq_len,
+                        softmax_scale=softmax_scale,
+                        causal=_get_causal_option(attn_type),
+                        window_size=window_size,
+                        alibi_slopes=alibi_slopes,
+                        softcap=logits_soft_cap,
+                        out=prefill_output,
+                        fa_version=self.fa_version,
                 )
             else:
                 # prefix-enabled attention
@@ -789,22 +812,45 @@ class FlashAttentionImpl(AttentionImpl):
                     "Only decoder-only models support prefix caching")
                 assert prefill_meta.seq_lens is not None
                 max_seq_len = max(prefill_meta.seq_lens)
-                flash_attn_varlen_func(  # noqa
-                    q=query,
-                    k=key_cache,
-                    v=value_cache,
-                    cu_seqlens_q=prefill_meta.query_start_loc,
-                    max_seqlen_q=prefill_meta.max_query_len,
-                    seqused_k=prefill_meta.seq_lens_tensor,
-                    max_seqlen_k=max_seq_len,
-                    softmax_scale=softmax_scale,
-                    causal=True,
-                    window_size=window_size,
-                    alibi_slopes=alibi_slopes,
-                    block_table=prefill_meta.block_tables,
-                    softcap=logits_soft_cap,
-                    out=prefill_output,
-                    fa_version=self.fa_version,
+                if self.alibi_sqrt:
+                    torch.ops.Optimus.vllm_varlen_fwd(
+                        query,
+                        key_cache,
+                        value_cache,
+                        prefill_output,
+                        prefill_meta.query_start_loc,
+                        prefill_meta.seq_start_loc,
+                        None,
+                        prefill_meta.block_tables,
+                        alibi_slopes,
+                        prefill_meta.max_query_len,
+                        max_seq_len,
+                        0,
+                        query.shape[-1]**(-0.5),
+                        False,
+                        True,
+                        window_size[0],
+                        window_size[1],
+                        False,
+                        None,
+                    )
+                else:
+                    flash_attn_varlen_func(  # noqa
+                        q=query,
+                        k=key_cache,
+                        v=value_cache,
+                        cu_seqlens_q=prefill_meta.query_start_loc,
+                        max_seqlen_q=prefill_meta.max_query_len,
+                        seqused_k=prefill_meta.seq_lens_tensor,
+                        max_seqlen_k=max_seq_len,
+                        softmax_scale=softmax_scale,
+                        causal=True,
+                        window_size=window_size,
+                        alibi_slopes=alibi_slopes,
+                        block_table=prefill_meta.block_tables,
+                        softcap=logits_soft_cap,
+                        out=prefill_output,
+                        fa_version=self.fa_version,
                 )
 
         if decode_meta := attn_metadata.decode_metadata:
@@ -818,43 +864,95 @@ class FlashAttentionImpl(AttentionImpl):
                 assert attn_type == AttentionType.DECODER, (
                     "Only decoder-only models support max_decode_query_len > 1"
                 )
-                flash_attn_varlen_func(
-                    q=decode_query,
-                    k=key_cache,
-                    v=value_cache,
-                    cu_seqlens_q=decode_meta.query_start_loc,
-                    max_seqlen_q=decode_meta.max_decode_query_len,
-                    seqused_k=decode_meta.seq_lens_tensor,
-                    max_seqlen_k=decode_meta.max_decode_seq_len,
-                    softmax_scale=softmax_scale,
-                    causal=True,
-                    window_size=window_size,
-                    alibi_slopes=alibi_slopes,
-                    softcap=logits_soft_cap,
-                    block_table=decode_meta.block_tables,
-                    out=decode_output,
-                    fa_version=self.fa_version,
+                if self.alibi_sqrt:
+                    torch.ops.Optimus.vllm_varlen_fwd(
+                        decode_query,
+                        key_cache,
+                        value_cache,
+                        decode_output,
+                        decode_meta.query_start_loc,
+                        decode_meta.seq_start_loc,
+                        None,
+                        decode_meta.block_tables,
+                        alibi_slopes,
+                        decode_meta.max_query_len,
+                        decode_meta.max_decode_seq_len,
+                        0,
+                        query.shape[-1]**(-0.5),
+                        False,
+                        True,
+                        window_size[0],
+                        window_size[1],
+                        False,
+                        None,
+                    )
+                else:
+                    flash_attn_varlen_func(
+                        q=decode_query,
+                        k=key_cache,
+                        v=value_cache,
+                        cu_seqlens_q=decode_meta.query_start_loc,
+                        max_seqlen_q=decode_meta.max_decode_query_len,
+                        seqused_k=decode_meta.seq_lens_tensor,
+                        max_seqlen_k=decode_meta.max_decode_seq_len,
+                        softmax_scale=softmax_scale,
+                        causal=True,
+                        window_size=window_size,
+                        alibi_slopes=alibi_slopes,
+                        softcap=logits_soft_cap,
+                        block_table=decode_meta.block_tables,
+                        out=decode_output,
+                        fa_version=self.fa_version,
                 )
             else:
                 # Use flash_attn_with_kvcache for normal decoding.
-                (
-                    seq_lens_arg,
-                    _,
-                    block_tables_arg,
-                ) = get_seq_len_block_table_args(decode_meta, False, attn_type)
-                flash_attn_with_kvcache(
-                    q=decode_query.unsqueeze(1),
-                    k_cache=key_cache,
-                    v_cache=value_cache,
-                    block_table=block_tables_arg,
-                    cache_seqlens=seq_lens_arg,
-                    softmax_scale=softmax_scale,
-                    causal=True,
-                    window_size=window_size,
-                    alibi_slopes=alibi_slopes,
-                    softcap=logits_soft_cap,
-                    out=decode_output.unsqueeze(1),
-                    fa_version=self.fa_version,
+                if self.alibi_sqrt:
+                    (
+                        seq_lens_arg,
+                        _,
+                        block_tables_arg,
+                    ) = get_seq_len_block_table_args(decode_meta, False,
+                                                     attn_type)
+                    torch.ops.Optimus.vllm_fwd_kvcache(
+                        q=decode_query.unsqueeze(1),
+                        k_cache=key_cache,
+                        v_cache=value_cache,
+                        k=None,
+                        v=None,
+                        cache_seqlens=seq_lens_arg,
+                        rotary_cos=None,
+                        rotary_sin=None,
+                        cache_batch_idx=None,
+                        block_table=block_tables_arg,
+                        alibi_slopes=alibi_slopes,
+                        out=decode_output.unsqueeze(1),
+                        softmax_scale=softmax_scale,
+                        causal=True,
+                        window_size_left=window_size[0],
+                        window_size_right=window_size[1],
+                        rotary_interleaved=True,
+                        num_splits=0
+                    )
+                else:
+                    (
+                        seq_lens_arg,
+                        _,
+                        block_tables_arg,
+                    ) = get_seq_len_block_table_args(decode_meta, False,
+                                                     attn_type)
+                    flash_attn_with_kvcache(
+                        q=decode_query.unsqueeze(1),
+                        k_cache=key_cache,
+                        v_cache=value_cache,
+                        block_table=block_tables_arg,
+                        cache_seqlens=seq_lens_arg,
+                        softmax_scale=softmax_scale,
+                        causal=True,
+                        window_size=window_size,
+                        alibi_slopes=alibi_slopes,
+                        softcap=logits_soft_cap,
+                        out=decode_output.unsqueeze(1),
+                        fa_version=self.fa_version,
                 )
         return output
 

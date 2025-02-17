@@ -103,6 +103,7 @@ _TEXT_GENERATION_MODELS = {
     "BartModel": ("bart", "BartForConditionalGeneration"),
     "BartForConditionalGeneration": ("bart", "BartForConditionalGeneration"),
     "Florence2ForConditionalGeneration": ("florence2", "Florence2ForConditionalGeneration"),  # noqa: E501
+    "Step1ForCausalLM": ("step1", "Step1ForCausalLM"),
 }
 
 _EMBEDDING_MODELS = {
