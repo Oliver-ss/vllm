@@ -239,6 +239,7 @@ class Step1Model(nn.Module):
     def __init__(self, vllm_config: VllmConfig, prefix: str = ""):
         super().__init__()
         config = vllm_config.model_config.hf_config
+        print(config)
         cache_config = vllm_config.cache_config
         quant_config = vllm_config.quant_config
         lora_config = vllm_config.lora_config
@@ -411,8 +412,3 @@ class Step1ForCausalLM(Step1PretrainedModel):
     ) -> Optional[SamplerOutput]:
         next_tokens = self.sampler(logits, sampling_metadata)
         return next_tokens
-
-    def sequence_flops(self, input_length, context_length):
-        output_flops = 1 * self.config.hidden_size * self.config.vocab_size * 2.0 / 1e12
-        return super().sequence_flops(input_length,
-                                      context_length) + output_flops
