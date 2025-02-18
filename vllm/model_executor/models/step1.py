@@ -31,6 +31,21 @@ from .utils import (PPMissingLayer, is_pp_missing_parameter,
                     make_empty_intermediate_tensors_factory, make_layers, maybe_prefix)
 
 
+try:
+    import os
+    OPTIMUS_LIB_PATH = os.environ.get('OPTIMUS_LIB_PATH')
+    if torch.__version__ >= "2.5":
+        torch.ops.load_library(os.path.join(OPTIMUS_LIB_PATH, "liboptimus_ths-torch2.5-cu124.cpython-310-x86_64-linux-gnu.so"))
+    elif torch.__version__ >= "2.3":
+        torch.ops.load_library(os.path.join(OPTIMUS_LIB_PATH, 'liboptimus_ths-torch2.3-cu121.cpython-310-x86_64-linux-gnu.so'))
+    elif torch.__version__ >= "2.2":
+        torch.ops.load_library(os.path.join(OPTIMUS_LIB_PATH, 'liboptimus_ths-torch2.2-cu121.cpython-310-x86_64-linux-gnu.so'))
+    else:
+        raise ImportError("Failed to load optimus library for flash attn ops for step1 model")
+except:
+    raise ImportError("Failed to load optimus library for flash attn ops for step1 model")
+
+
 def _get_alibi_slopes(n_heads):
     n = 2**math.floor(math.log2(n_heads))  # nearest 2**n to n_heads
     m0 = 2.0**(-8.0 / n)
@@ -188,8 +203,8 @@ class Step1DecoderLayer(nn.Module):
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             num_kv_heads=config.num_attention_groups,
-            slopes=config.alibi_slopes,
-            max_pos_interp_ratio=config.max_pos_interp_ratio,
+            slopes=config.alibi_slopes if getattr(config, 'alibi_slopes', None) else None,
+            max_pos_interp_ratio=getattr(config, 'max_pos_interp_ratio', 1.0),
             cache_config=cache_config,
             quant_config=quant_config,
             prefix=f"{prefix}.self_attn",
@@ -239,7 +254,6 @@ class Step1Model(nn.Module):
     def __init__(self, vllm_config: VllmConfig, prefix: str = ""):
         super().__init__()
         config = vllm_config.model_config.hf_config
-        print(config)
         cache_config = vllm_config.cache_config
         quant_config = vllm_config.quant_config
         lora_config = vllm_config.lora_config
