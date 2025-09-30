@@ -1142,7 +1142,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                 attn_metadata_i = builder.build(
                     common_prefix_len=common_prefix_len,
                     common_attn_metadata=common_attn_metadata,
-                    #afd_metadata=afd_metadata,
+                    afd_metadata=afd_metadata,
                     **extra_attn_metadata_args)
 
                 for layer_name in attn_group.layer_names:

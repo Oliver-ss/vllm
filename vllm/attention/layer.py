@@ -628,7 +628,8 @@ def unified_attention_with_output(
                 attn_metadata = None  # padding
     else:
         attn_metadata = attn_metadata[
-            layer_name] if attn_metadata != None else None
+            layer_name] if attn_metadata is not None else None
+
     self = forward_context.no_compile_layers[layer_name]
     kv_cache = self.kv_cache[forward_context.virtual_engine]
     self.impl.forward(self,

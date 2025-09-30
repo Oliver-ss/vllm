@@ -7,7 +7,6 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 import typing
-
 import torch
 
 class FFNNeedForwardData:
@@ -24,6 +23,7 @@ class FFNNeedForwardData:
         self.total_num_scheduled_tokens = total_num_scheduled_tokens
         self.is_dummy_run = is_dummy_run
 
+
 @dataclass
 class AFDConnectorMetadata:
     """Lightweight AFD metadata containing core information needed for
@@ -35,7 +35,6 @@ class AFDConnectorMetadata:
     # multiple sequences
     dtype: torch.dtype
     device: torch.device
-
     topk_idx: Optional[torch.Tensor]
     # indices token which expert to be sended
     topk_weights: Optional[torch.Tensor]
@@ -56,6 +55,9 @@ class AFDConnectorMetadata:
     timestamp: Optional[float] = None
     """ffn need forward data"""
     ffn_need_forward_data: Optional[FFNNeedForwardData] = None
+    # Optional fields for debugging and extensibility
+    request_id: Optional[str] = None
+    timestamp: Optional[float] = None
 
     def __post_init__(self):
         """Validate data consistency."""
