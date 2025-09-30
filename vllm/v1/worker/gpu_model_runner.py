@@ -2165,6 +2165,8 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                 cudagraph_runtime_mode, batch_descriptor = \
                     self.cudagraph_dispatcher.dispatch(batch_descriptor)
 
+        if afd_metadata is None:
+            afd_metadata = AFDMetadata(0, 0, 0, self.afd_connector, 0)
         # Run the model.
         # Use persistent buffers for CUDA graphs.
         with (set_forward_context(
